@@ -1,2 +1,3 @@
-checkpoints/
+checkpoints/best_model.h5
 vqa_model_final.h5
+checkpoints/*.h5
