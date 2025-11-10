@@ -13,16 +13,22 @@ import os, json, random, cv2, shutil
 # ------------------------------------------------------
 # Flask setup
 # ------------------------------------------------------
-
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)
 
 
 # ------------------------------------------------------
-# Ensure dataset images are available in /static
+# Health-check route (to confirm Render binding)
+# ------------------------------------------------------
+@app.route("/")
+def health_check():
+    return jsonify({"status": "✅ VQA backend is running successfully!"})
+
+
+# ------------------------------------------------------
+# Copy Easy-VQA images to static folder (first time only)
 # ------------------------------------------------------
 def copy_easy_vqa_images():
-    """Copy Easy-VQA dataset images into static/easy_vqa_images if missing."""
     from easy_vqa import get_train_image_paths, get_test_image_paths
     train_paths = get_train_image_paths()
     test_paths = get_test_image_paths()
@@ -41,13 +47,14 @@ def copy_easy_vqa_images():
             shutil.copy(src, f"{base_dir}/test/")
     print("✅ Easy-VQA images ready in /static folder")
 
+
 copy_easy_vqa_images()
 
+
 # ------------------------------------------------------
-# Load model + metadata once
+# Load dataset and model
 # ------------------------------------------------------
 print("🔹 Loading Easy-VQA dataset and model...")
-
 (
     _train_X_ims, _train_X_seqs, _train_Y,
     _test_X_ims, _test_X_seqs, _test_Y,
@@ -63,36 +70,32 @@ test_qs, test_answers, test_ids = get_test_questions()
 
 model = build_vqa_model(vocab_size, max_seq_len, num_answers, im_shape, trainable_resnet=False)
 model.load_weights("vqa_model_final.h5")
-
 print("✅ Model and dataset loaded successfully!")
 
+
 # ------------------------------------------------------
-# API: Random Image
+# Random image API
 # ------------------------------------------------------
 @app.route("/api/random_image", methods=["GET"])
 def random_image():
-    """Return random image URL from static folder."""
-    if random.random() < 0.5:
-        folder = "static/easy_vqa_images/train"
-    else:
-        folder = "static/easy_vqa_images/test"
-
+    folder = "static/easy_vqa_images/test" if random.random() < 0.5 else "static/easy_vqa_images/train"
     image_file = random.choice(os.listdir(folder))
     image_url = f"/{folder}/{image_file}"
     return jsonify({"image_path": image_url})
 
+
 # ------------------------------------------------------
-# API: Random Question
+# Random question API
 # ------------------------------------------------------
 @app.route("/api/random_question", methods=["GET"])
 def random_question():
-    """Return random question from Easy-VQA dataset."""
     all_questions = train_qs + test_qs
     question = random.choice(all_questions)
     return jsonify({"question": question})
 
+
 # ------------------------------------------------------
-# API: Predict + GradCAM
+# Predict + Grad-CAM API
 # ------------------------------------------------------
 @app.route("/api/predict", methods=["POST"])
 def predict_vqa():
@@ -103,7 +106,7 @@ def predict_vqa():
     if not image_path or not question:
         return jsonify({"error": "Missing image_path or question"}), 400
 
-    # Convert /static/... path → actual local file path
+    # Convert /static/... → local path
     if image_path.startswith("/"):
         image_path = image_path.lstrip("/")
     image_path = os.path.join(os.getcwd(), image_path)
@@ -117,12 +120,12 @@ def predict_vqa():
     seq = tokenizer.texts_to_sequences([question])
     padded_seq = pad_sequences(seq, maxlen=max_seq_len, padding='post')
 
-    # Predict
+    # Predict answer
     preds = model.predict([img_array, padded_seq])
     pred_idx = np.argmax(preds[0])
     pred_answer = all_answers[pred_idx]
 
-    # Grad-CAM heatmap
+    # Grad-CAM
     heatmap = make_gradcam_heatmap(img_array, padded_seq, model, "conv5_block3_out")
     img = cv2.imread(image_path)
     img = cv2.resize(img, (128, 128))
@@ -132,8 +135,6 @@ def predict_vqa():
     overlay = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
 
     os.makedirs("static", exist_ok=True)
-
-    # 🔹 Optional cleanup of previous Grad-CAMs
     for f in os.listdir("static"):
         if f.startswith("gradcam_") and f.endswith(".png"):
             try:
@@ -141,7 +142,6 @@ def predict_vqa():
             except:
                 pass
 
-    # 🔹 Unique filename for Grad-CAM output
     unique_id = str(random.randint(10000, 99999))
     out_filename = f"gradcam_{unique_id}.png"
     out_path = os.path.join("static", out_filename)
@@ -152,16 +152,12 @@ def predict_vqa():
         "heatmap_url": f"/static/{out_filename}"
     })
 
-# ------------------------------------------------------
-# Run Flask
-# -----------------------------------------------------
-# -
-@app.route("/")
-def health_check():
-    return {"status": "VQA Backend running successfully!"}, 200
 
+# ------------------------------------------------------
+# Main entry point (for local testing & Render binding)
+# ------------------------------------------------------
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
-    print(f"✅ Starting Flask on port {port}")
+    print(f"🚀 Flask server starting on port {port}...")
     app.run(host="0.0.0.0", port=port)
