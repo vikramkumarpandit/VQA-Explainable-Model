@@ -8,3 +8,4 @@ gdown==5.1.0
 requests==2.32.3
 Pillow>=10.4.0
 gunicorn==23.0.0
+matplotlib==3.9.2
