@@ -8,7 +8,7 @@ from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.applications.resnet50 import preprocess_input as resnet_preprocess
 import numpy as np
-import os, json, random, cv2, shutil
+import os, random, cv2, shutil, threading
 
 # ------------------------------------------------------
 # Flask setup
@@ -16,17 +16,28 @@ import os, json, random, cv2, shutil
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)
 
+# ------------------------------------------------------
+# Global placeholders for async model loading
+# ------------------------------------------------------
+model = None
+tokenizer = None
+all_answers = []
+max_seq_len = 0
+train_qs = []
+test_qs = []
 
 # ------------------------------------------------------
-# Health-check route (to confirm Render binding)
+# Health-check route (Render detects this immediately)
 # ------------------------------------------------------
 @app.route("/")
 def health_check():
-    return jsonify({"status": "✅ VQA backend is running successfully!"})
-
+    if model is None:
+        return jsonify({"status": "🕐 Server live — model still loading..."}), 200
+    else:
+        return jsonify({"status": "✅ VQA backend running successfully!"}), 200
 
 # ------------------------------------------------------
-# Copy Easy-VQA images to static folder (first time only)
+# Copy Easy-VQA images into /static (only once)
 # ------------------------------------------------------
 def copy_easy_vqa_images():
     from easy_vqa import get_train_image_paths, get_test_image_paths
@@ -47,34 +58,37 @@ def copy_easy_vqa_images():
             shutil.copy(src, f"{base_dir}/test/")
     print("✅ Easy-VQA images ready in /static folder")
 
-
 copy_easy_vqa_images()
 
+# ------------------------------------------------------
+# Asynchronous model + dataset loading
+# ------------------------------------------------------
+def load_model_async():
+    global model, tokenizer, all_answers, max_seq_len, train_qs, test_qs
+
+    print("🔹 Loading Easy-VQA dataset and model in background...")
+    (
+        _train_X_ims, _train_X_seqs, _train_Y,
+        _test_X_ims, _test_X_seqs, _test_Y,
+        im_shape, vocab_size, num_answers,
+        all_answers, answer_to_idx, idx_to_answer,
+        max_seq_len, tokenizer,
+        train_image_paths, test_image_paths,
+        train_image_ids, test_image_ids
+    ) = setup_v2()
+
+    train_qs, train_answers, train_ids = get_train_questions()
+    test_qs, test_answers, test_ids = get_test_questions()
+
+    model_ = build_vqa_model(vocab_size, max_seq_len, num_answers, im_shape, trainable_resnet=False)
+    model_.load_weights("vqa_model_final.h5")
+    model = model_
+    print("✅ Model and dataset loaded successfully!")
+
+threading.Thread(target=load_model_async).start()
 
 # ------------------------------------------------------
-# Load dataset and model
-# ------------------------------------------------------
-print("🔹 Loading Easy-VQA dataset and model...")
-(
-    _train_X_ims, _train_X_seqs, _train_Y,
-    _test_X_ims, _test_X_seqs, _test_Y,
-    im_shape, vocab_size, num_answers,
-    all_answers, answer_to_idx, idx_to_answer,
-    max_seq_len, tokenizer,
-    train_image_paths, test_image_paths,
-    train_image_ids, test_image_ids
-) = setup_v2()
-
-train_qs, train_answers, train_ids = get_train_questions()
-test_qs, test_answers, test_ids = get_test_questions()
-
-model = build_vqa_model(vocab_size, max_seq_len, num_answers, im_shape, trainable_resnet=False)
-model.load_weights("vqa_model_final.h5")
-print("✅ Model and dataset loaded successfully!")
-
-
-# ------------------------------------------------------
-# Random image API
+# API: Random image
 # ------------------------------------------------------
 @app.route("/api/random_image", methods=["GET"])
 def random_image():
@@ -83,22 +97,25 @@ def random_image():
     image_url = f"/{folder}/{image_file}"
     return jsonify({"image_path": image_url})
 
-
 # ------------------------------------------------------
-# Random question API
+# API: Random question
 # ------------------------------------------------------
 @app.route("/api/random_question", methods=["GET"])
 def random_question():
+    if not train_qs or not test_qs:
+        return jsonify({"question": "Dataset still loading... please wait."})
     all_questions = train_qs + test_qs
     question = random.choice(all_questions)
     return jsonify({"question": question})
 
-
 # ------------------------------------------------------
-# Predict + Grad-CAM API
+# API: Predict + Grad-CAM
 # ------------------------------------------------------
 @app.route("/api/predict", methods=["POST"])
 def predict_vqa():
+    if model is None:
+        return jsonify({"error": "Model still loading, please wait..."}), 503
+
     data = request.json
     image_path = data.get("image_path")
     question = data.get("question")
@@ -106,7 +123,6 @@ def predict_vqa():
     if not image_path or not question:
         return jsonify({"error": "Missing image_path or question"}), 400
 
-    # Convert /static/... → local path
     if image_path.startswith("/"):
         image_path = image_path.lstrip("/")
     image_path = os.path.join(os.getcwd(), image_path)
@@ -152,9 +168,8 @@ def predict_vqa():
         "heatmap_url": f"/static/{out_filename}"
     })
 
-
 # ------------------------------------------------------
-# Main entry point (for local testing & Render binding)
+# Entry point (for local + Render)
 # ------------------------------------------------------
 if __name__ == "__main__":
     import os
