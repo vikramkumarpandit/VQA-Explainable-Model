@@ -1,0 +1,103 @@
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background-color: #f3f6fa;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 1000px;
+  margin: 40px auto;
+  background: white;
+  border-radius: 12px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+h1 {
+  margin-bottom: 8px;
+  color: #222;
+}
+
+.subtitle {
+  color: #555;
+  margin-bottom: 25px;
+}
+
+/* Buttons in same line */
+.button-row {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+.predict-row {
+  margin-bottom: 20px;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: 0.2s;
+}
+
+button:hover {
+  background-color: #0056b3;
+  transform: scale(1.05);
+}
+
+/* Question textarea */
+.question-box {
+  margin: 20px 0;
+}
+
+textarea {
+  width: 80%;
+  max-width: 600px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #aaa;
+  font-size: 16px;
+}
+
+/* Output section (images + answer) */
+.output-section {
+  margin-top: 25px;
+}
+
+.image-pair {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 40px;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.image-column {
+  flex: 1;
+  min-width: 300px;
+}
+
+#vqa-image, #heatmap-image {
+  width: 100%;
+  max-width: 320px;
+  border: 2px solid #ccc;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+#answer-box {
+  margin-top: 20px;
+  font-size: 22px;
+  font-weight: bold;
+  color: #007bff;
+}

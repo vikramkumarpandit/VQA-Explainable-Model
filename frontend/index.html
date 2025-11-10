@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Explainable VQA Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Explainable Visual Question Answering</h1>
+    <p class="subtitle">Easy-VQA Dataset • Grad-CAM Explainability</p>
+
+    <!-- Control Buttons -->
+    <div class="button-row">
+      <button type="button" id="random-image-btn">🎲 Random Image</button>
+      <button type="button" id="random-question-btn">❓ Random Question</button>
+    </div>
+
+    <div class="predict-row">
+      <button type="button" id="predict-btn">🔍 Predict Answer</button>
+    </div>
+
+    <!-- Question -->
+    <div class="question-box">
+      <h3>Question</h3>
+      <textarea id="question-input" rows="2" placeholder="Enter or load a question"></textarea>
+    </div>
+
+    <!-- Output -->
+    <div class="output-section">
+      <div class="image-pair">
+        <div class="image-column">
+          <h2>Original Image</h2>
+          <img id="vqa-image" src="" alt="VQA Sample" />
+        </div>
+        <div class="image-column">
+          <h2>Grad-CAM Output</h2>
+          <img id="heatmap-image" src="" alt="GradCAM Heatmap" />
+        </div>
+      </div>
+
+      <div id="answer-box"></div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
