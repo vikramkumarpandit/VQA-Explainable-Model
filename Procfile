@@ -1,1 +1,1 @@
-web: gunicorn --chdir backend app:app --timeout 600
+web: gunicorn --chdir backend wsgi:app --workers 1 --threads 4 --timeout 600
