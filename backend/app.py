@@ -1,10 +1,11 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-# ✅ FIXED IMPORTS
-from backend.prepare_data import setup_v2
-from backend.model_v2 import build_vqa_model
-from backend.gradcam_vqa import make_gradcam_heatmap
+# ✅ 1. FIXED IMPORTS
+# Use relative imports (the dot) since 'backend' is a package
+from .prepare_data import setup_v2
+from .model_v2 import build_vqa_model
+from .gradcam_vqa import make_gradcam_heatmap
 
 from easy_vqa import get_train_questions, get_test_questions
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
@@ -12,6 +13,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.applications.resnet50 import preprocess_input as resnet_preprocess
 import numpy as np
 import os, random, cv2, shutil
+import sys # <-- Moved import to top
 
 # ------------------------------------------------------
 # Flask setup
@@ -20,7 +22,7 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 CORS(app)
 
 # ------------------------------------------------------
-# Ensure dataset images are available in /static
+# This function will now be called by the Build Command
 # ------------------------------------------------------
 def copy_easy_vqa_images():
     """Copy Easy-VQA dataset images into static/easy_vqa_images if missing."""
@@ -42,12 +44,14 @@ def copy_easy_vqa_images():
             shutil.copy(src, f"{base_dir}/test/")
     print("✅ Easy-VQA images ready in /static folder")
 
-copy_easy_vqa_images()
+# ❌ 2. REMOVED GLOBAL CALL
+# We no longer call this on startup. It's part of the build step.
+# copy_easy_vqa_images() 
 
 # ------------------------------------------------------
-# Load model + metadata once
+# Load FAST metadata only
 # ------------------------------------------------------
-print("🔹 Loading Easy-VQA dataset and model...")
+print("🔹 Loading Easy-VQA dataset metadata...")
 
 (
     _train_X_ims, _train_X_seqs, _train_Y,
@@ -62,10 +66,22 @@ print("🔹 Loading Easy-VQA dataset and model...")
 train_qs, train_answers, train_ids = get_train_questions()
 test_qs, test_answers, test_ids = get_test_questions()
 
-model = build_vqa_model(vocab_size, max_seq_len, num_answers, im_shape, trainable_resnet=False)
-model.load_weights("vqa_model_final.h5")
+# ------------------------------------------------------
+# ✅ 3. LAZY-LOAD THE MODEL
+# ------------------------------------------------------
+vqa_model = None # Global placeholder for the model
 
-print("✅ Model and dataset loaded successfully!")
+def get_model():
+    """Loads the model once on the first request."""
+    global vqa_model
+    if vqa_model is None:
+        print("🚀 First request: Building VQA model and loading weights...")
+        vqa_model = build_vqa_model(vocab_size, max_seq_len, num_answers, im_shape, trainable_resnet=False)
+        vqa_model.load_weights("vqa_model_final.h5")
+        print("✅ Model loaded and ready.")
+    return vqa_model
+
+print("✅ Server ready. Heavy model will be loaded on first request.")
 
 # ------------------------------------------------------
 # API: Random Image
@@ -93,6 +109,9 @@ def random_question():
 # ------------------------------------------------------
 @app.route("/api/predict", methods=["POST"])
 def predict_vqa():
+    # --- This is the key change! ---
+    model = get_model() # Load the model (or get the already-loaded one)
+
     data = request.json
     image_path = data.get("image_path")
     question = data.get("question")
@@ -150,10 +169,19 @@ def predict_vqa():
     })
 
 # ------------------------------------------------------
-# Run Flask (for Render)
+# ✅ 4. MODIFIED 'main' block
 # ------------------------------------------------------
 if __name__ == "__main__":
-    import os
-    port = int(os.environ.get("PORT", 8080))
-    print(f"✅ Starting server on port {port} ...")
-    app.run(host="0.0.0.0:8080", port=port, debug=False)
+    
+    # This allows us to call `python backend/app.py copy_images`
+    if len(sys.argv) > 1 and sys.argv[1] == 'copy_images':
+        print("🚀 Running build-time task: copy_easy_vqa_images...")
+        copy_easy_vqa_images()
+    
+    # This is the default for running the server
+    else:
+        # ✅ 5. BUG FIX
+        # host="0.0.0.0" is correct. host="0.0.0.0:8080" was an error.
+        port = int(os.environ.get("PORT", 8080))
+        print(f"✅ Starting server on port {port} ...")
+        app.run(host="0.0.0.0", port=port, debug=False)
