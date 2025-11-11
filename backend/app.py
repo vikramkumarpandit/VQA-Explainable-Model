@@ -1,9 +1,11 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from backend.prepare_data import setup_v2
 
-from model_v2 import build_vqa_model
-from gradcam_vqa import make_gradcam_heatmap
+# ✅ FIXED IMPORTS
+from backend.prepare_data import setup_v2
+from backend.model_v2 import build_vqa_model
+from backend.gradcam_vqa import make_gradcam_heatmap
+
 from easy_vqa import get_train_questions, get_test_questions
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from tensorflow.keras.preprocessing.sequence import pad_sequences
