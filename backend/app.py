@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from prepare_data import setup_v2
+from backend.prepare_data import setup_v2
+
 from model_v2 import build_vqa_model
 from gradcam_vqa import make_gradcam_heatmap
 from easy_vqa import get_train_questions, get_test_questions
